@@ -1,4 +1,4 @@
-vim.cmd([[command! -nargs=* - SessionTodo callcomplete=file v:lua.require("session_todo").setup()]])
+vim.cmd([[command! -nargs=0 SessionTodo call v:lua.require("session_todo").setup()]])
 vim.cmd([[command! -nargs=? SessionTodoToggle call v:lua.require("session_todo").toggle()]])
 vim.cmd([[command! -nargs=+ SessionTodoAdd call v:lua.require("session_todo").add_task(<q-args>)]])
 vim.cmd([[command! SessionTodoStart call v:lua.require("session_todo").start_timer()]])
