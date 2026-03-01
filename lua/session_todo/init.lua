@@ -40,6 +40,9 @@ function M.toggle()
     on_delete_task = function(idx)
       M.delete_task(idx)
     end,
+    on_edit_task = function(idx, text, duration)
+      M.edit_task(idx, text, duration)
+    end,
     on_edit_duration = function(idx, duration)
       M.edit_duration(idx, duration)
     end,
@@ -93,6 +96,17 @@ function M.delete_task(idx)
   window.render(M.state, M.config)
 end
 
+function M.edit_task(idx, text, duration)
+  if idx > 0 and idx <= #M.state.tasks then
+    M.state.tasks[idx].text = text
+    if duration then
+      M.state.tasks[idx].duration = duration
+    end
+    storage.save(M.config.storage_path, M.state.tasks)
+    window.render(M.state, M.config)
+  end
+end
+
 function M.edit_duration(idx, duration)
   if idx > 0 and idx <= #M.state.tasks then
     M.state.tasks[idx].duration = duration
@@ -113,6 +127,8 @@ function M.start_timer()
   end, function(remaining)
     M.state.tasks[M.state.current_task_idx].elapsed = task.duration - remaining
     window.render(M.state, M.config)
+    local ok, lualine = pcall(require, "lualine")
+    if ok then lualine.refresh() end
   end)
   window.render(M.state, M.config)
 end

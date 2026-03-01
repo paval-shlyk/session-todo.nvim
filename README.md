@@ -46,11 +46,18 @@ require("session_todo").setup({
 | `Enter` | Select task |
 | `Space` | Toggle complete |
 | `a` | Add task |
+| `r` | Rename task (with optional duration) |
 | `e` | Edit duration (minutes) |
 | `d` | Delete task |
-| `/` | Search/filter |
+| `f` | Filter/search tasks |
 | `g?` | Help |
 | `q` | Close |
+
+### Timer
+
+- Select a task with `Enter`
+- Press `<leader>s` to start/stop timer
+- Timer shows in widget header and in lualine (if integrated)
 
 ### Global Keymaps
 

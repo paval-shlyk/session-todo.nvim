@@ -69,24 +69,27 @@ function M.create_window(state, config)
     M.render(M.state, M.config)
   end, { buffer = M.buf, noremap = true, silent = true })
 
-  vim.keymap.set("n", "/", function()
+  vim.keymap.set("n", "f", function()
     M.search_mode = true
     M.show_help = false
-    vim.cmd("stopinsert")
-    vim.cmd([[call inputsave()]])
-    vim.cmd([[let g:session_todo_search = input('/')]])
-    vim.cmd([[call inputrestore()]])
-    local query = vim.g.session_todo_search or ""
-    vim.g.session_todo_search = nil
-    M.search_query = query
-    M.render(M.state, M.config)
+    vim.defer_fn(function()
+      vim.cmd([[call inputsave()]])
+      vim.cmd([[let g:session_todo_search = input('Filter: ')]])
+      vim.cmd([[call inputrestore()]])
+      local query = vim.g.session_todo_search or ""
+      vim.g.session_todo_search = nil
+      M.search_query = query
+      M.render(M.state, M.config)
+    end, 10)
   end, { buffer = M.buf, noremap = true, silent = true })
 
   vim.keymap.set("n", "j", function()
     if M.show_help or M.search_mode then return end
     local filtered = M.get_filtered_tasks()
+    if #filtered == 0 then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
-    local new_line = math.min(cursor[1] + 1, #filtered + TASK_START_LINE - 1)
+    local max_line = math.min(#filtered + TASK_START_LINE - 1, 3 + #filtered)
+    local new_line = math.min(cursor[1] + 1, max_line)
     vim.api.nvim_win_set_cursor(M.win, { new_line, 0 })
   end, { buffer = M.buf, noremap = true, silent = true })
 
@@ -126,17 +129,42 @@ function M.create_window(state, config)
 
   vim.keymap.set("n", "a", function()
     if M.show_help or M.search_mode then return end
-    vim.cmd("stopinsert")
-    vim.cmd([[call inputsave()]])
-    vim.cmd([[let g:session_todo_new_task = input('New task [duration in min]: ')]])
-    vim.cmd([[call inputrestore()]])
-    local input = vim.g.session_todo_new_task
-    vim.g.session_todo_new_task = nil
-    if input and input ~= "" then
-      local text, duration = M.parse_task_input(input)
-      if text and text ~= "" then
-        M.callbacks.on_add_task(text, duration)
+    vim.defer_fn(function()
+      vim.cmd([[call inputsave()]])
+      vim.cmd([[let g:session_todo_new_task = input('Task [duration]: ')]])
+      vim.cmd([[call inputrestore()]])
+      local input = vim.g.session_todo_new_task
+      vim.g.session_todo_new_task = nil
+      if input and input ~= "" then
+        local text, duration = M.parse_task_input(input)
+        if text and text ~= "" then
+          M.callbacks.on_add_task(text, duration)
+        end
       end
+    end, 10)
+  end, { buffer = M.buf, noremap = true, silent = true })
+
+  vim.keymap.set("n", "r", function()
+    if M.show_help or M.search_mode then return end
+    local cursor = vim.api.nvim_win_get_cursor(M.win)
+    local line = cursor[1]
+    local filtered = M.get_filtered_tasks()
+    if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
+      local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
+      local task = M.state.tasks[original_idx]
+      vim.defer_fn(function()
+        vim.cmd([[call inputsave()]])
+        vim.cmd([[let g:session_todo_edit = input('Edit task: ', ']] .. task.text .. [[')]])
+        vim.cmd([[call inputrestore()]])
+        local new_text = vim.g.session_todo_edit
+        vim.g.session_todo_edit = nil
+        if new_text and new_text ~= "" then
+          local text, duration = M.parse_task_input(new_text)
+          if text and text ~= "" then
+            M.callbacks.on_edit_task(original_idx, text, duration or task.duration)
+          end
+        end
+      end, 10)
     end
   end, { buffer = M.buf, noremap = true, silent = true })
 
@@ -146,17 +174,19 @@ function M.create_window(state, config)
     local line = cursor[1]
     local filtered = M.get_filtered_tasks()
     if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
-      vim.cmd("stopinsert")
-      vim.cmd([[call inputsave()]])
-      vim.cmd([[let g:session_todo_duration = input('Duration (minutes): ')]])
-      vim.cmd([[call inputrestore()]])
-      local duration_str = vim.g.session_todo_duration
-      vim.g.session_todo_duration = nil
-      local duration = tonumber(duration_str)
-      if duration and duration > 0 and duration <= 480 then
-        local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
-        M.callbacks.on_edit_duration(original_idx, duration * 60)
-      end
+      local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
+      local task = M.state.tasks[original_idx]
+      vim.defer_fn(function()
+        vim.cmd([[call inputsave()]])
+        vim.cmd([[let g:session_todo_duration = input('Duration (min): ', ']] .. (task.duration / 60) .. [[')]])
+        vim.cmd([[call inputrestore()]])
+        local duration_str = vim.g.session_todo_duration
+        vim.g.session_todo_duration = nil
+        local duration = tonumber(duration_str)
+        if duration and duration > 0 and duration <= 480 then
+          M.callbacks.on_edit_duration(original_idx, duration * 60)
+        end
+      end, 10)
     end
   end, { buffer = M.buf, noremap = true, silent = true })
 
@@ -249,7 +279,7 @@ function M.render(state, config)
       table.insert(lines, " No task selected ")
     end
   else
-    table.insert(lines, " ⏱ --:-- ")
+    table.insert(lines, " ⏱ --:--  <leader>s to start")
   end
 
   if M.search_query ~= "" then
@@ -261,7 +291,7 @@ function M.render(state, config)
   for i, item in ipairs(filtered) do
     local task = item.task
     local status = task.done and "✓" or "○"
-    local prefix = task.original_idx == state.current_task_idx and "▶" or " "
+    local prefix = item.original_idx == state.current_task_idx and "▶" or " "
     local elapsed = math.floor(task.elapsed / 60)
     local dur = math.floor(task.duration / 60)
     table.insert(lines, string.format("%s %s %s %d/%dm", prefix, status, task.text, elapsed, dur))
@@ -271,7 +301,7 @@ function M.render(state, config)
     if M.search_query ~= "" then
       table.insert(lines, " (no matches) ")
     else
-      table.insert(lines, " (empty) ")
+      table.insert(lines, " (empty - a to add) ")
     end
   end
 
@@ -305,10 +335,11 @@ function M.render_help()
     " j/k   move up/down",
     " Enter select task",
     " a     add task",
+    " r     rename task",
     " e     edit duration",
     " d     delete task",
     " Space toggle done",
-    " /     search filter",
+    " f     filter/search",
     " g?    toggle help",
     " q     close",
   }
