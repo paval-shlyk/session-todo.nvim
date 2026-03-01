@@ -2,6 +2,7 @@ local M = {}
 local storage = require("session_todo.storage")
 local window = require("session_todo.window")
 local timer = require("session_todo.timer")
+local vim = vim
 
 M.state = {
   tasks = {},
@@ -122,13 +123,20 @@ function M.start_timer()
   end
   local task = M.state.tasks[M.state.current_task_idx]
   M.state.timer_running = true
+  timer.set_task_idx(M.state.current_task_idx)
   timer.start(task.duration, function()
     M.on_timer_complete()
-  end, function(remaining)
-    M.state.tasks[M.state.current_task_idx].elapsed = task.duration - remaining
-    window.render(M.state, M.config)
-    local ok, lualine = pcall(require, "lualine")
-    if ok then lualine.refresh() end
+  end, function(remaining, task_idx)
+    vim.schedule(function()
+      if task_idx and task_idx > 0 and M.state.tasks[task_idx] then
+        M.state.tasks[task_idx].elapsed = M.state.tasks[task_idx].duration - remaining
+      end
+      window.render(M.state, M.config)
+      local ok, lualine = pcall(require, "lualine")
+      if ok then
+        pcall(lualine.refresh)
+      end
+    end)
   end)
   window.render(M.state, M.config)
 end

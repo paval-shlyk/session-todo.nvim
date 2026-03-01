@@ -74,12 +74,7 @@ require("session_todo").setup({
 require("lualine").setup({
   sections = {
     lualine_c = {
-      {
-        function()
-          return require("session_todo").get_statusline()
-        end,
-        color = { fg = "#50fa7b" },
-      }
+      { require("session_todo").get_statusline, color = { fg = "#50fa7b" } }
     }
   }
 })
