@@ -121,10 +121,11 @@ function M.start_timer()
     vim.notify("No task selected", vim.log.levels.WARN, { title = "SessionTodo" })
     return
   end
+
   local task = M.state.tasks[M.state.current_task_idx]
   local task_idx = M.state.current_task_idx
   M.state.timer_running = true
-  
+
   timer.start(task.duration, function()
     M.on_timer_complete()
   end, function(remaining)

@@ -11,7 +11,6 @@ end
 function M.start(duration, on_complete, on_tick)
   M.stop()
   local remaining = duration
-  
   M.timer = vim.fn.timer_start(1000, function()
     remaining = remaining - 1
     if on_tick then
@@ -23,7 +22,7 @@ function M.start(duration, on_complete, on_tick)
         on_complete()
       end
     end
-  end, { ["repeat"] = true })
+  end, { ["repeat"] = -1 })
 end
 
 function M.stop()
@@ -33,4 +32,5 @@ function M.stop()
   end
 end
 
+return M
 return M
