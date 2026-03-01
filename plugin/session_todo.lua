@@ -6,6 +6,7 @@ vim.cmd([[command! SessionTodoStop call v:lua.require("session_todo").stop_timer
 vim.cmd([[command! -nargs=0 SessionTodoPick call v:lua.require("session_todo").pick()]])
 
 vim.keymap.set("n", "<leader>tt", require("session_todo").toggle, { desc = "Toggle SessionTodo" })
+vim.keymap.set("n", "<leader>ta", require("session_todo").add_task_interactive, { desc = "Add task" })
 vim.keymap.set("n", "<leader>tp", require("session_todo").pick, { desc = "Pick task" })
 vim.keymap.set("n", "<leader>ts", function()
   local st = require("session_todo")

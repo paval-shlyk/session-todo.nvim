@@ -17,8 +17,8 @@ M.config = {
   long_break = 15 * 60,
   storage_path = vim.fn.stdpath("data") .. "/session_todos.json",
   relative = "editor",
-  width = 55,
-  height = 18,
+  width = 45,
+  height = 12,
 }
 
 function M.setup(opts)
@@ -67,6 +67,12 @@ function M.pick()
       M.select_task(idx)
     end,
   })
+end
+
+function M.add_task_interactive()
+  window.add_task_interactive(function(text, duration)
+    M.add_task(text, duration)
+  end)
 end
 
 function M.select_task(idx)
