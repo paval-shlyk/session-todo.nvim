@@ -22,7 +22,7 @@ function M.start(duration, on_complete, on_tick)
         on_complete()
       end
     end
-  end, { repeat = true })
+  end, { ["repeat"] = true })
 end
 
 function M.stop()
