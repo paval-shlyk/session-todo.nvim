@@ -85,7 +85,7 @@ function M.create_window(state, config)
 
   vim.keymap.set("n", "j", function()
     if M.show_help or M.search_mode then return end
-    local filtered = M.get_filtered_tasks()
+    local filtered = M.get_filtered_tasks(M.state)
     if #filtered == 0 then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
     local max_line = math.min(#filtered + TASK_START_LINE - 1, 3 + #filtered)
@@ -109,7 +109,7 @@ function M.create_window(state, config)
     end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
     local line = cursor[1]
-    local filtered = M.get_filtered_tasks()
+    local filtered = M.get_filtered_tasks(M.state)
     if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
       local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
       M.callbacks.on_select(original_idx)
@@ -120,7 +120,7 @@ function M.create_window(state, config)
     if M.show_help or M.search_mode then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
     local line = cursor[1]
-    local filtered = M.get_filtered_tasks()
+    local filtered = M.get_filtered_tasks(M.state)
     if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
       local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
       M.callbacks.on_toggle_task(original_idx)
@@ -148,7 +148,7 @@ function M.create_window(state, config)
     if M.show_help or M.search_mode then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
     local line = cursor[1]
-    local filtered = M.get_filtered_tasks()
+    local filtered = M.get_filtered_tasks(M.state)
     if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
       local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
       local task = M.state.tasks[original_idx]
@@ -172,7 +172,7 @@ function M.create_window(state, config)
     if M.show_help or M.search_mode then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
     local line = cursor[1]
-    local filtered = M.get_filtered_tasks()
+    local filtered = M.get_filtered_tasks(M.state)
     if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
       local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
       local task = M.state.tasks[original_idx]
@@ -194,7 +194,7 @@ function M.create_window(state, config)
     if M.show_help or M.search_mode then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
     local line = cursor[1]
-    local filtered = M.get_filtered_tasks()
+    local filtered = M.get_filtered_tasks(M.state)
     if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
       local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
       M.callbacks.on_delete_task(original_idx)
@@ -211,17 +211,17 @@ function M.create_window(state, config)
   end, { buffer = M.buf, noremap = true, silent = true })
 end
 
-function M.get_filtered_tasks()
+function M.get_filtered_tasks(state)
   if M.search_query == "" then
     local result = {}
-    for i, task in ipairs(M.state.tasks) do
+    for i, task in ipairs(state.tasks) do
       table.insert(result, { task = task, original_idx = i })
     end
     return result
   end
   local query = M.search_query:lower()
   local result = {}
-  for i, task in ipairs(M.state.tasks) do
+  for i, task in ipairs(state.tasks) do
     if task.text:lower():find(query, 1, true) then
       table.insert(result, { task = task, original_idx = i })
     end
@@ -263,7 +263,7 @@ function M.render(state, config)
   end
 
   local lines = {}
-  local filtered = M.get_filtered_tasks()
+  local filtered = M.get_filtered_tasks(state)
 
   local session_indicator = state.session_type == "work" and "Work" or "Break"
   table.insert(lines, " ▶ " .. session_indicator .. " ")

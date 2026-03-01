@@ -122,21 +122,16 @@ function M.start_timer()
     return
   end
   local task = M.state.tasks[M.state.current_task_idx]
+  local task_idx = M.state.current_task_idx
   M.state.timer_running = true
-  timer.set_task_idx(M.state.current_task_idx)
+  vim.notify("Timer started: " .. task.duration .. "s", vim.log.levels.INFO, { title = "SessionTodo" })
+  
   timer.start(task.duration, function()
     M.on_timer_complete()
-  end, function(remaining, task_idx)
-    vim.schedule(function()
-      if task_idx and task_idx > 0 and M.state.tasks[task_idx] then
-        M.state.tasks[task_idx].elapsed = M.state.tasks[task_idx].duration - remaining
-      end
-      window.render(M.state, M.config)
-      local ok, lualine = pcall(require, "lualine")
-      if ok then
-        pcall(lualine.refresh)
-      end
-    end)
+  end, function(remaining)
+    M.state.tasks[task_idx].elapsed = M.state.tasks[task_idx].duration - remaining
+    vim.cmd("redrawstatus!")
+    window.render(M.state, M.config)
   end)
   window.render(M.state, M.config)
 end
