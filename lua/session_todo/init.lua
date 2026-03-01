@@ -33,6 +33,12 @@ function M.toggle()
     on_toggle_task = function(idx)
       M.toggle_task(idx)
     end,
+    on_add_task = function(text)
+      M.add_task(text)
+    end,
+    on_delete_task = function(idx)
+      M.delete_task(idx)
+    end,
     on_start_timer = function()
       M.start_timer()
     end,
@@ -60,6 +66,17 @@ function M.add_task(text, duration)
     done = false,
     elapsed = 0,
   })
+  storage.save(M.config.storage_path, M.state.tasks)
+  window.render(M.state, M.config)
+end
+
+function M.delete_task(idx)
+  table.remove(M.state.tasks, idx)
+  if M.state.current_task_idx == idx then
+    M.state.current_task_idx = 0
+  elseif M.state.current_task_idx > idx then
+    M.state.current_task_idx = M.state.current_task_idx - 1
+  end
   storage.save(M.config.storage_path, M.state.tasks)
   window.render(M.state, M.config)
 end
