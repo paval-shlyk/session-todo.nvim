@@ -10,12 +10,12 @@ Manage tasks per working session with time estimation and Pomodoro-style timer t
 
 Using packer:
 ```lua
-use "~/path/to/session_todo.nvim"
+use "paval-shlyk/session-todo.nvim"
 ```
 
 Using lazy.nvim:
 ```lua
-{ "~/path/to/session_todo.nvim" }
+{ "paval-shlyk/session-todo.nvim" }
 ```
 
 ## Setup

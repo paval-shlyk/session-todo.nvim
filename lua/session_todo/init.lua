@@ -129,7 +129,6 @@ function M.start_timer()
   timer.start(task.duration, function()
     M.on_timer_complete()
   end, function(remaining)
-    vim.notify("Tick: " .. remaining, vim.log.levels.INFO, { title = "SessionTodo" })
     M.state.tasks[task_idx].elapsed = M.state.tasks[task_idx].duration - remaining
     window.render(M.state, M.config)
   end)
