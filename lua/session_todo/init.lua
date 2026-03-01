@@ -86,12 +86,16 @@ function M.toggle_task(idx)
   window.render(M.state, M.config)
 end
 
+local EMOJIS = { "📌", "📝", "💡", "🔧", "🚀", "⚡", "🎯", "📋", "✅", "🔍", "💻", "🛠", "📦", "🎨", "🔨" }
+
 function M.add_task(text, duration)
+  local emoji = EMOJIS[math.random(#EMOJIS)]
   table.insert(M.state.tasks, {
     text = text,
     duration = duration or M.config.work_duration,
     done = false,
     elapsed = 0,
+    emoji = emoji,
   })
   storage.save(M.config.storage_path, M.state.tasks)
   window.render(M.state, M.config)

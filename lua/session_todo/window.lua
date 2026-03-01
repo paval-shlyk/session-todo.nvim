@@ -92,28 +92,31 @@ function M.create_window(state, config)
 
   vim.keymap.set("n", "j", function()
     if M.show_help or M.search_mode then return end
+    local filtered = M.get_filtered_tasks(M.state)
+    if #filtered == 0 then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
     local line = cursor[1]
     if line < TASK_START_LINE then
       vim.api.nvim_win_set_cursor(M.win, { TASK_START_LINE, 0 })
       return
     end
-    local filtered = M.get_filtered_tasks(M.state)
-    if #filtered == 0 then return end
-    local new_line = math.min(line + 1, TASK_START_LINE + #filtered - 1)
-    vim.api.nvim_win_set_cursor(M.win, { new_line, 0 })
+    local last_line = TASK_START_LINE + #filtered - 1
+    if line >= last_line then
+      return
+    end
+    vim.api.nvim_win_set_cursor(M.win, { line + 1, 0 })
   end, { buffer = M.buf, noremap = true, silent = true })
 
   vim.keymap.set("n", "k", function()
     if M.show_help or M.search_mode then return end
+    local filtered = M.get_filtered_tasks(M.state)
+    if #filtered == 0 then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
     local line = cursor[1]
     if line <= TASK_START_LINE then
-      vim.api.nvim_win_set_cursor(M.win, { 1, 0 })
       return
     end
-    local new_line = math.max(line - 1, TASK_START_LINE)
-    vim.api.nvim_win_set_cursor(M.win, { new_line, 0 })
+    vim.api.nvim_win_set_cursor(M.win, { line - 1, 0 })
   end, { buffer = M.buf, noremap = true, silent = true })
 
   vim.keymap.set("n", "<cr>", function()
@@ -315,7 +318,8 @@ function M.render(state, config)
     local prefix = item.original_idx == state.current_task_idx and ">" or " "
     local elapsed = math.floor(task.elapsed / 60)
     local dur = math.floor(task.duration / 60)
-    table.insert(lines, string.format("%s %s %s (%d/%dm)", prefix, status, task.text, elapsed, dur))
+    local emoji = task.emoji or "📌"
+    table.insert(lines, string.format("%s %s %s %s (%d/%dm)", prefix, emoji, status, task.text, elapsed, dur))
   end
 
   if #filtered == 0 then
