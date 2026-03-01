@@ -49,8 +49,6 @@ function M.create_window(state, config)
   vim.api.nvim_buf_set_option(M.buf, "filetype", "session_todo")
   vim.api.nvim_buf_set_option(M.buf, "modifiable", false)
 
-  vim.api.nvim_win_set_cursor(M.win, { TASK_START_LINE, 0 })
-
   vim.keymap.set("n", "q", function()
     if M.show_help then
       M.show_help = false
@@ -98,15 +96,12 @@ function M.create_window(state, config)
     if #filtered == 0 then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
     local line = cursor[1]
+    local last_line = TASK_START_LINE + #filtered - 1
     if line < TASK_START_LINE then
       vim.api.nvim_win_set_cursor(M.win, { TASK_START_LINE, 0 })
-      return
+    elseif line < last_line then
+      vim.api.nvim_win_set_cursor(M.win, { line + 1, 0 })
     end
-    local last_line = TASK_START_LINE + #filtered - 1
-    if line >= last_line then
-      return
-    end
-    vim.api.nvim_win_set_cursor(M.win, { line + 1, 0 })
   end, { buffer = M.buf, noremap = true, silent = true })
 
   vim.keymap.set("n", "k", function()
@@ -115,10 +110,9 @@ function M.create_window(state, config)
     if #filtered == 0 then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
     local line = cursor[1]
-    if line <= TASK_START_LINE then
-      return
+    if line > TASK_START_LINE then
+      vim.api.nvim_win_set_cursor(M.win, { line - 1, 0 })
     end
-    vim.api.nvim_win_set_cursor(M.win, { line - 1, 0 })
   end, { buffer = M.buf, noremap = true, silent = true })
 
   vim.keymap.set("n", "<cr>", function()
