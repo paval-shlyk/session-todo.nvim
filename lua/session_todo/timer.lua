@@ -33,4 +33,3 @@ function M.stop()
 end
 
 return M
-return M
