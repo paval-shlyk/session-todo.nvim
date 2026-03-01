@@ -15,6 +15,7 @@ M.config = {
   short_break = 5 * 60,
   long_break = 15 * 60,
   storage_path = vim.fn.stdpath("data") .. "/session_todos.json",
+  relative = "editor",
 }
 
 function M.setup(opts)
@@ -33,17 +34,28 @@ function M.toggle()
     on_toggle_task = function(idx)
       M.toggle_task(idx)
     end,
-    on_add_task = function(text)
-      M.add_task(text)
+    on_add_task = function(text, duration)
+      M.add_task(text, duration)
     end,
     on_delete_task = function(idx)
       M.delete_task(idx)
+    end,
+    on_edit_duration = function(idx, duration)
+      M.edit_duration(idx, duration)
     end,
     on_start_timer = function()
       M.start_timer()
     end,
     on_stop_timer = function()
       M.stop_timer()
+    end,
+  })
+end
+
+function M.pick()
+  window.pick(M.state, M.config, {
+    on_select = function(idx)
+      M.select_task(idx)
     end,
   })
 end
@@ -79,6 +91,14 @@ function M.delete_task(idx)
   end
   storage.save(M.config.storage_path, M.state.tasks)
   window.render(M.state, M.config)
+end
+
+function M.edit_duration(idx, duration)
+  if idx > 0 and idx <= #M.state.tasks then
+    M.state.tasks[idx].duration = duration
+    storage.save(M.config.storage_path, M.state.tasks)
+    window.render(M.state, M.config)
+  end
 end
 
 function M.start_timer()

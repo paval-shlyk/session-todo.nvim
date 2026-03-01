@@ -33,23 +33,56 @@ require("session_todo").setup({
 | Command | Description |
 |---------|-------------|
 | `:SessionTodoToggle` | Toggle floating window |
-| `:SessionTodoAdd <text>` | Add new task |
+| `:SessionTodoAdd <text> [duration]` | Add task (duration: 25, 25m, 1h) |
+| `:SessionTodoPick` | Quick pick task |
 | `:SessionTodoStart` | Start timer |
 | `:SessionTodoStop` | Stop timer |
 
-### Keymaps
+### Widget Keymaps
+
+| Key | Description |
+|-----|-------------|
+| `j/k` | Navigate tasks |
+| `Enter` | Select task |
+| `Space` | Toggle complete |
+| `a` | Add task |
+| `e` | Edit duration (minutes) |
+| `d` | Delete task |
+| `/` | Search/filter |
+| `g?` | Help |
+| `q` | Close |
+
+### Global Keymaps
 
 | Key | Description |
 |-----|-------------|
 | `<leader>tt` | Toggle window |
+| `<leader>tp` | Pick task |
 | `<leader>ts` | Start/Stop timer |
-| `Enter` | Select task |
-| `Space` | Toggle task complete |
-| `q` | Close window |
+
+## Lualine Integration
+
+```lua
+-- In your lualine config
+require("lualine").setup({
+  sections = {
+    lualine_c = {
+      {
+        function()
+          return require("session_todo").get_statusline()
+        end,
+        color = { fg = "#50fa7b" },
+      }
+    }
+  }
+})
+```
 
 ## Features
 
 - Floating task list with timer display
+- Search/filter tasks by name
+- Editable task duration
 - Session tracking (Work/Break cycles)
 - Tasks saved to JSON (`~/.local/share/nvim/session_todos.json`)
 - Notifications on timer complete
