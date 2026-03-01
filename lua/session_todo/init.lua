@@ -124,13 +124,12 @@ function M.start_timer()
   local task = M.state.tasks[M.state.current_task_idx]
   local task_idx = M.state.current_task_idx
   M.state.timer_running = true
-  vim.notify("Timer started: " .. task.duration .. "s", vim.log.levels.INFO, { title = "SessionTodo" })
   
   timer.start(task.duration, function()
     M.on_timer_complete()
   end, function(remaining)
+    vim.notify("Tick: " .. remaining, vim.log.levels.INFO, { title = "SessionTodo" })
     M.state.tasks[task_idx].elapsed = M.state.tasks[task_idx].duration - remaining
-    vim.cmd("redrawstatus!")
     window.render(M.state, M.config)
   end)
   window.render(M.state, M.config)
