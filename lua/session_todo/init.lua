@@ -17,6 +17,8 @@ M.config = {
   long_break = 15 * 60,
   storage_path = vim.fn.stdpath("data") .. "/session_todos.json",
   relative = "editor",
+  width = 55,
+  height = 18,
 }
 
 function M.setup(opts)
