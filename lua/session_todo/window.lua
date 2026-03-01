@@ -9,7 +9,7 @@ M.show_help = false
 M.search_mode = false
 M.search_query = ""
 
-local TASK_START_LINE = 4
+local TASK_START_LINE = 3
 
 function M.toggle(state, config, callbacks)
   M.callbacks = callbacks
@@ -48,6 +48,8 @@ function M.create_window(state, config)
 
   vim.api.nvim_buf_set_option(M.buf, "filetype", "session_todo")
   vim.api.nvim_buf_set_option(M.buf, "modifiable", false)
+
+  vim.api.nvim_win_set_cursor(M.win, { TASK_START_LINE, 0 })
 
   vim.keymap.set("n", "q", function()
     if M.show_help then
@@ -263,11 +265,11 @@ end
 function M.parse_task_input(input)
   local duration
   local text = input
-  
+
   local dur_min = input:match("(%d+)m$")
   local dur_hr = input:match("(%d+)h$")
   local dur_num = input:match("(%d+)$")
-  
+
   if dur_min then
     duration = tonumber(dur_min) * 60
     text = input:sub(1, -(#dur_min + 2))
@@ -278,7 +280,7 @@ function M.parse_task_input(input)
     duration = tonumber(dur_num) * 60
     text = input:sub(1, -(#dur_num + 1))
   end
-  
+
   text = text:gsub("^%s+", ""):gsub("%s+$", "")
   return text, duration
 end
@@ -308,7 +310,8 @@ function M.render(state, config)
     end
   end
 
-  table.insert(lines, string.format(" %s | %s | %s ", session, timer_str, M.search_query ~= "" and "/" .. M.search_query or ""))
+  table.insert(lines,
+    string.format(" %s | %s | %s ", session, timer_str, M.search_query ~= "" and "/" .. M.search_query or ""))
 
   table.insert(lines, "")
 
