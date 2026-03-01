@@ -6,7 +6,6 @@ M.callbacks = {}
 M.state = nil
 M.config = nil
 M.show_help = false
-M.search_mode = false
 M.search_query = ""
 
 local TASK_START_LINE = 3
@@ -16,7 +15,6 @@ function M.toggle(state, config, callbacks)
   M.state = state
   M.config = config
   M.show_help = false
-  M.search_mode = false
   M.search_query = ""
   if M.win and vim.api.nvim_win_is_valid(M.win) then
     vim.api.nvim_win_close(M.win, true)
@@ -33,11 +31,9 @@ function M.create_window(state, config)
   local row = math.floor((vim.o.lines - height) / 2)
   local col = math.floor((vim.o.columns - width) / 2)
 
-  local relative_to = config.relative or "editor"
-
   M.buf = vim.api.nvim_create_buf(false, true)
   M.win = vim.api.nvim_open_win(M.buf, true, {
-    relative = relative_to,
+    relative = config.relative or "editor",
     width = width,
     height = height,
     row = row,
@@ -48,208 +44,125 @@ function M.create_window(state, config)
 
   vim.api.nvim_buf_set_option(M.buf, "filetype", "session_todo")
   vim.api.nvim_buf_set_option(M.buf, "modifiable", false)
+  vim.api.nvim_win_set_option(M.win, "cursorline", true)
 
-  vim.keymap.set("n", "q", function()
+  local function map(key, fn)
+    vim.keymap.set("n", key, fn, { buffer = M.buf, noremap = true, silent = true })
+  end
+
+  map("q", function()
     if M.show_help then
       M.show_help = false
-      M.search_mode = false
-      M.search_query = ""
       M.render(M.state, M.config)
       return
     end
-    if M.search_mode then
-      M.search_mode = false
-      M.search_query = ""
-      M.render(M.state, M.config)
-      return
-    end
-    if M.win and vim.api.nvim_win_is_valid(M.win) then
-      vim.api.nvim_win_close(M.win, true)
-      M.win = nil
-    end
-  end, { buffer = M.buf, noremap = true, silent = true })
+    vim.api.nvim_win_close(M.win, true)
+    M.win = nil
+  end)
 
-  vim.keymap.set("n", "g?", function()
+  map("g?", function()
     M.show_help = not M.show_help
-    M.search_mode = false
     M.render(M.state, M.config)
-  end, { buffer = M.buf, noremap = true, silent = true })
+  end)
 
-  vim.keymap.set("n", "f", function()
-    M.search_mode = true
-    M.show_help = false
-    vim.defer_fn(function()
-      vim.cmd([[call inputsave()]])
-      vim.cmd([[let g:session_todo_search = input('Filter: ')]])
-      vim.cmd([[call inputrestore()]])
-      local query = vim.g.session_todo_search or ""
-      vim.g.session_todo_search = nil
-      M.search_query = query
-      M.search_mode = false
-      M.render(M.state, M.config)
-    end, 10)
-  end, { buffer = M.buf, noremap = true, silent = true })
+  map("f", function()
+    vim.cmd("stopinsert")
+    vim.fn.inputsave()
+    local query = vim.fn.input("Filter: ")
+    vim.fn.inputrestore()
+    M.search_query = query or ""
+    M.render(M.state, M.config)
+  end)
 
-  vim.keymap.set("n", "j", function()
-    if M.show_help or M.search_mode then return end
+  map("j", function()
+    if M.show_help then return end
     local filtered = M.get_filtered_tasks(M.state)
-    if #filtered == 0 then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
-    local line = cursor[1]
     local last_line = TASK_START_LINE + #filtered - 1
-    if line < TASK_START_LINE then
-      vim.api.nvim_win_set_cursor(M.win, { TASK_START_LINE, 0 })
-    elseif line < last_line then
-      vim.api.nvim_win_set_cursor(M.win, { line + 1, 0 })
+    if cursor[1] < last_line then
+      vim.api.nvim_win_set_cursor(M.win, { cursor[1] + 1, 0 })
     end
-  end, { buffer = M.buf, noremap = true, silent = true })
+  end)
 
-  vim.keymap.set("n", "k", function()
-    if M.show_help or M.search_mode then return end
-    local filtered = M.get_filtered_tasks(M.state)
-    if #filtered == 0 then return end
+  map("k", function()
+    if M.show_help then return end
+    local cursor = vim.api.nvim_win_get_cursor(M.win)
+    if cursor[1] > TASK_START_LINE then
+      vim.api.nvim_win_set_cursor(M.win, { cursor[1] - 1, 0 })
+    end
+  end)
+
+  local function get_current_item_idx()
     local cursor = vim.api.nvim_win_get_cursor(M.win)
     local line = cursor[1]
-    if line > TASK_START_LINE then
-      vim.api.nvim_win_set_cursor(M.win, { line - 1, 0 })
-    end
-  end, { buffer = M.buf, noremap = true, silent = true })
+    if line < TASK_START_LINE then return nil end
+    local filtered = M.get_filtered_tasks(M.state)
+    local item = filtered[line - TASK_START_LINE + 1]
+    return item and item.original_idx or nil
+  end
 
-  vim.keymap.set("n", "<cr>", function()
+  map("<cr>", function()
     if M.show_help then
       M.show_help = false
       M.render(M.state, M.config)
       return
     end
-    if M.search_mode then
-      return
-    end
-    local cursor = vim.api.nvim_win_get_cursor(M.win)
-    local line = cursor[1]
-    if line < TASK_START_LINE then return end
-    local filtered = M.get_filtered_tasks(M.state)
-    if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
-      local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
-      M.callbacks.on_select(original_idx)
-    end
-  end, { buffer = M.buf, noremap = true, silent = true })
+    local idx = get_current_item_idx()
+    if idx then M.callbacks.on_select(idx) end
+  end)
 
-  vim.keymap.set("n", " ", function()
-    if M.show_help or M.search_mode then return end
-    local cursor = vim.api.nvim_win_get_cursor(M.win)
-    local line = cursor[1]
-    if line < TASK_START_LINE then return end
-    local filtered = M.get_filtered_tasks(M.state)
-    if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
-      local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
-      M.callbacks.on_toggle_task(original_idx)
+  map(" ", function()
+    local idx = get_current_item_idx()
+    if idx then M.callbacks.on_toggle_task(idx) end
+  end)
+
+  map("a", function()
+    M.add_task_interactive(M.callbacks.on_add_task)
+  end)
+
+  map("r", function()
+    local idx = get_current_item_idx()
+    if not idx then return end
+    local task = M.state.tasks[idx]
+    vim.fn.inputsave()
+    local new_input = vim.fn.input("Rename: ", task.text)
+    vim.fn.inputrestore()
+    if new_input and new_input ~= "" then
+      local text, duration = M.parse_task_input(new_input)
+      M.callbacks.on_edit_task(idx, text, duration or task.duration)
     end
-  end, { buffer = M.buf, noremap = true, silent = true })
+  end)
 
-  vim.keymap.set("n", "a", function()
-    if M.show_help or M.search_mode then return end
-    vim.defer_fn(function()
-      vim.cmd([[call inputsave()]])
-      vim.cmd([[let g:session_todo_new_task = input('Task: ')]])
-      vim.cmd([[call inputrestore()]])
-      local input = vim.g.session_todo_new_task
-      vim.g.session_todo_new_task = nil
-      if input and input ~= "" then
-        local text, duration = M.parse_task_input(input)
-        if text and text ~= "" then
-          M.callbacks.on_add_task(text, duration)
-        end
-      end
-    end, 10)
-  end, { buffer = M.buf, noremap = true, silent = true })
-
-  vim.keymap.set("n", "r", function()
-    if M.show_help or M.search_mode then return end
-    local cursor = vim.api.nvim_win_get_cursor(M.win)
-    local line = cursor[1]
-    if line < TASK_START_LINE then return end
-    local filtered = M.get_filtered_tasks(M.state)
-    if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
-      local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
-      local task = M.state.tasks[original_idx]
-      vim.defer_fn(function()
-        vim.cmd([[call inputsave()]])
-        vim.cmd([[let g:session_todo_edit = input('Rename: ', ']] .. task.text .. [[')]])
-        vim.cmd([[call inputrestore()]])
-        local new_text = vim.g.session_todo_edit
-        vim.g.session_todo_edit = nil
-        if new_text and new_text ~= "" then
-          local text, duration = M.parse_task_input(new_text)
-          if text and text ~= "" then
-            M.callbacks.on_edit_task(original_idx, text, duration or task.duration)
-          end
-        end
-      end, 10)
+  map("e", function()
+    local idx = get_current_item_idx()
+    if not idx then return end
+    local task = M.state.tasks[idx]
+    vim.fn.inputsave()
+    local dur_str = vim.fn.input("Duration (min): ", tostring(task.duration / 60))
+    vim.fn.inputrestore()
+    local dur = tonumber(dur_str)
+    if dur and dur > 0 then
+      M.callbacks.on_edit_duration(idx, dur * 60)
     end
-  end, { buffer = M.buf, noremap = true, silent = true })
+  end)
 
-  vim.keymap.set("n", "e", function()
-    if M.show_help or M.search_mode then return end
-    local cursor = vim.api.nvim_win_get_cursor(M.win)
-    local line = cursor[1]
-    if line < TASK_START_LINE then return end
-    local filtered = M.get_filtered_tasks(M.state)
-    if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
-      local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
-      local task = M.state.tasks[original_idx]
-      vim.defer_fn(function()
-        vim.cmd([[call inputsave()]])
-        vim.cmd([[let g:session_todo_duration = input('Duration (min): ', ']] .. (task.duration / 60) .. [[')]])
-        vim.cmd([[call inputrestore()]])
-        local duration_str = vim.g.session_todo_duration
-        vim.g.session_todo_duration = nil
-        local duration = tonumber(duration_str)
-        if duration and duration > 0 and duration <= 480 then
-          M.callbacks.on_edit_duration(original_idx, duration * 60)
-        end
-      end, 10)
-    end
-  end, { buffer = M.buf, noremap = true, silent = true })
+  map("d", function()
+    local idx = get_current_item_idx()
+    if idx then M.callbacks.on_delete_task(idx) end
+  end)
 
-  vim.keymap.set("n", "d", function()
-    if M.show_help or M.search_mode then return end
-    local cursor = vim.api.nvim_win_get_cursor(M.win)
-    local line = cursor[1]
-    if line < TASK_START_LINE then return end
-    local filtered = M.get_filtered_tasks(M.state)
-    if line >= TASK_START_LINE and line <= TASK_START_LINE + #filtered - 1 then
-      local original_idx = filtered[line - TASK_START_LINE + 1].original_idx
-      M.callbacks.on_delete_task(original_idx)
-    end
-  end, { buffer = M.buf, noremap = true, silent = true })
-
-  vim.keymap.set("n", "<leader>s", function()
-    if M.show_help or M.search_mode then return end
-    if M.state.timer_running then
-      M.callbacks.on_stop_timer()
-    else
-      M.callbacks.on_start_timer()
-    end
-  end, { buffer = M.buf, noremap = true, silent = true })
-
-  vim.keymap.set("n", "<leader>r", function()
-    if M.show_help or M.search_mode then return end
-    M.callbacks.on_reset_timer()
-  end, { buffer = M.buf, noremap = true, silent = true })
+  map("<leader>s", function() M.callbacks.on_start_timer() end)
+  map("<leader>r", function() M.callbacks.on_reset_timer() end)
+  
+  -- Initial cursor position
+  vim.api.nvim_win_set_cursor(M.win, { TASK_START_LINE, 0 })
 end
 
 function M.get_filtered_tasks(state)
-  if M.search_query == "" then
-    local result = {}
-    for i, task in ipairs(state.tasks) do
-      table.insert(result, { task = task, original_idx = i })
-    end
-    return result
-  end
-  local query = M.search_query:lower()
   local result = {}
+  local query = M.search_query:lower()
   for i, task in ipairs(state.tasks) do
-    if task.text:lower():find(query, 1, true) then
+    if query == "" or task.text:lower():find(query, 1, true) then
       table.insert(result, { task = task, original_idx = i })
     end
   end
@@ -257,148 +170,77 @@ function M.get_filtered_tasks(state)
 end
 
 function M.parse_task_input(input)
-  local duration
-  local text = input
-
-  local dur_min = input:match("(%d+)m$")
-  local dur_hr = input:match("(%d+)h$")
-  local dur_num = input:match("(%d+)$")
-
-  if dur_min then
-    duration = tonumber(dur_min) * 60
-    text = input:sub(1, -(#dur_min + 2))
-  elseif dur_hr then
-    duration = tonumber(dur_hr) * 3600
-    text = input:sub(1, -(#dur_hr + 2))
-  elseif dur_num then
-    duration = tonumber(dur_num) * 60
-    text = input:sub(1, -(#dur_num + 1))
+  local text = input:gsub("%s+%d+[mh]?$", "")
+  local dur_str = input:match("%s+(%d+[mh]?)$")
+  local duration = nil
+  if dur_str then
+    local val = tonumber(dur_str:match("%d+"))
+    if dur_str:find("h") then duration = val * 3600
+    else duration = val * 60 end
   end
-
-  text = text:gsub("^%s+", ""):gsub("%s+$", "")
   return text, duration
 end
 
 function M.render(state, config)
-  if not M.buf or not vim.api.nvim_buf_is_valid(M.buf) then
-    return
-  end
-
-  if M.show_help then
-    M.render_help()
-    return
-  end
-
+  if not M.win or not vim.api.nvim_win_is_valid(M.win) then return end
+  
   local lines = {}
-  local filtered = M.get_filtered_tasks(state)
-
-  local session = state.session_type == "work" and "Work" or "Break"
-  local timer_str = "--:--"
-  if state.timer_running then
-    local task = state.tasks[state.current_task_idx]
-    if task then
-      local remaining = task.duration - task.elapsed
-      local mins = math.floor(remaining / 60)
-      local secs = remaining % 60
-      timer_str = string.format("%02d:%02d", mins, secs)
+  if M.show_help then
+    lines = { " Help ", "", " j/k navigate", " Enter select", " Space toggle", " a add", " r rename", " e duration", " d delete", " f filter", " <leader>r reset", " <leader>s start/stop", " g? help", " q close" }
+  else
+    local session = state.session_type:gsub("^%l", string.upper)
+    local timer_str = "--:--"
+    if state.timer_running and state.tasks[state.current_task_idx] then
+      local t = state.tasks[state.current_task_idx]
+      local rem = t.duration - t.elapsed
+      timer_str = string.format("%02d:%02d", math.floor(rem / 60), rem % 60)
     end
+    table.insert(lines, string.format(" %s | %s | %s", session, timer_str, M.search_query ~= "" and "/"..M.search_query or ""))
+    table.insert(lines, "")
+    local filtered = M.get_filtered_tasks(state)
+    for _, item in ipairs(filtered) do
+      local t = item.task
+      local status = t.done and "[x]" or "[ ]"
+      local prefix = item.original_idx == state.current_task_idx and ">" or " "
+      table.insert(lines, string.format("%s %s %s %s (%d/%dm)", prefix, t.emoji or "📌", status, t.text, math.floor(t.elapsed/60), math.floor(t.duration/60)))
+    end
+    if #filtered == 0 then table.insert(lines, " (empty)") end
   end
 
-  table.insert(lines,
-    string.format(" %s | %s | %s ", session, timer_str, M.search_query ~= "" and "/" .. M.search_query or ""))
-
-  table.insert(lines, "")
-
-  for i, item in ipairs(filtered) do
-    local task = item.task
-    local status = task.done and "[x]" or "[ ]"
-    local prefix = item.original_idx == state.current_task_idx and ">" or " "
-    local elapsed = math.floor(task.elapsed / 60)
-    local dur = math.floor(task.duration / 60)
-    local emoji = task.emoji or "📌"
-    table.insert(lines, string.format("%s %s %s %s (%d/%dm)", prefix, emoji, status, task.text, elapsed, dur))
-  end
-
-  if #filtered == 0 then
-    local msg = M.search_query ~= "" and "no matches" or "empty (a)"
-    table.insert(lines, " " .. msg)
-  end
-
+  local cursor = vim.api.nvim_win_get_cursor(M.win)
   vim.api.nvim_buf_set_option(M.buf, "modifiable", true)
   vim.api.nvim_buf_set_lines(M.buf, 0, -1, false, lines)
   vim.api.nvim_buf_set_option(M.buf, "modifiable", false)
-
-  vim.api.nvim_buf_clear_namespace(M.buf, -1, 0, -1)
-  vim.api.nvim_buf_add_highlight(M.buf, 0, "Title", 0, 0, -1)
-end
-
-function M.render_help()
-  local lines = {
-    " Help ",
-    "",
-    " j/k   navigate",
-    " Enter select",
-    " Space toggle",
-    " a     add",
-    " r     rename",
-    " e     duration",
-    " d     delete",
-    " f     filter",
-    " <leader>r reset",
-    " <leader>s start/stop",
-    " g?    help",
-    " q     close",
-  }
-
-  vim.api.nvim_buf_set_option(M.buf, "modifiable", true)
-  vim.api.nvim_buf_set_lines(M.buf, 0, -1, false, lines)
-  vim.api.nvim_buf_set_option(M.buf, "modifiable", false)
+  
+  -- Preserve/adjust cursor
+  local max_line = #lines
+  local new_line = math.min(cursor[1], max_line)
+  if new_line > 0 then
+    vim.api.nvim_win_set_cursor(M.win, { new_line, 0 })
+  end
 
   vim.api.nvim_buf_clear_namespace(M.buf, -1, 0, -1)
   vim.api.nvim_buf_add_highlight(M.buf, 0, "Title", 0, 0, -1)
 end
 
 function M.pick(state, config, callbacks)
-  local filtered = {}
-  for i, task in ipairs(state.tasks) do
-    table.insert(filtered, {
-      value = task,
-      ordinal = task.text,
-      display = (task.done and "[x] " or "[ ] ") .. task.text .. " (" .. math.floor(task.duration / 60) .. "m)",
-    })
+  local items = {}
+  for i, t in ipairs(state.tasks) do
+    table.insert(items, { idx = i, text = t.text, display = string.format("%s %s", t.done and "[x]" or "[ ]", t.text) })
   end
-
-  vim.ui.select(filtered, {
-    prompt = "Select task:",
-    format_item = function(item)
-      return item.display
-    end,
-  }, function(selected)
-    if selected then
-      for i, task in ipairs(state.tasks) do
-        if task == selected.value then
-          callbacks.on_select(i)
-          break
-        end
-      end
-    end
+  vim.ui.select(items, { prompt = "Select task:", format_item = function(item) return item.display end }, function(choice)
+    if choice then callbacks.on_select(choice.idx) end
   end)
 end
 
 function M.add_task_interactive(callback)
-  vim.defer_fn(function()
-    vim.cmd([[call inputsave()]])
-    vim.cmd([[let g:session_todo_new_task = input('Task: ')]])
-    vim.cmd([[call inputrestore()]])
-    local input = vim.g.session_todo_new_task
-    vim.g.session_todo_new_task = nil
-    if input and input ~= "" then
-      local text, duration = M.parse_task_input(input)
-      if text and text ~= "" then
-        callback(text, duration)
-      end
-    end
-  end, 10)
+  vim.fn.inputsave()
+  local input = vim.fn.input("New task: ")
+  vim.fn.inputrestore()
+  if input and input ~= "" then
+    local text, duration = M.parse_task_input(input)
+    callback(text, duration)
+  end
 end
 
 return M

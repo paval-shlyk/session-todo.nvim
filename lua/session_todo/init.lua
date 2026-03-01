@@ -21,6 +21,8 @@ M.config = {
   height = 12,
 }
 
+local EMOJIS = { "📌", "📝", "💡", "🔧", "🚀", "⚡", "🎯", "📋", "✅", "🔍", "💻", "🛠", "📦", "🎨", "🔨" }
+
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
   M.state.tasks = storage.load(M.config.storage_path)
@@ -31,48 +33,26 @@ end
 
 function M.toggle()
   window.toggle(M.state, M.config, {
-    on_select = function(idx)
-      M.select_task(idx)
-    end,
-    on_toggle_task = function(idx)
-      M.toggle_task(idx)
-    end,
-    on_add_task = function(text, duration)
-      M.add_task(text, duration)
-    end,
-    on_delete_task = function(idx)
-      M.delete_task(idx)
-    end,
-    on_edit_task = function(idx, text, duration)
-      M.edit_task(idx, text, duration)
-    end,
-    on_edit_duration = function(idx, duration)
-      M.edit_duration(idx, duration)
-    end,
-    on_start_timer = function()
-      M.start_timer()
-    end,
-    on_stop_timer = function()
-      M.stop_timer()
-    end,
-    on_reset_timer = function()
-      M.reset_timer()
-    end,
+    on_select = M.select_task,
+    on_toggle_task = M.toggle_task,
+    on_add_task = M.add_task,
+    on_delete_task = M.delete_task,
+    on_edit_task = M.edit_task,
+    on_edit_duration = M.edit_duration,
+    on_start_timer = M.start_timer,
+    on_stop_timer = M.stop_timer,
+    on_reset_timer = M.reset_timer,
   })
 end
 
 function M.pick()
   window.pick(M.state, M.config, {
-    on_select = function(idx)
-      M.select_task(idx)
-    end,
+    on_select = M.select_task,
   })
 end
 
 function M.add_task_interactive()
-  window.add_task_interactive(function(text, duration)
-    M.add_task(text, duration)
-  end)
+  window.add_task_interactive(M.add_task)
 end
 
 function M.select_task(idx)
@@ -81,12 +61,12 @@ function M.select_task(idx)
 end
 
 function M.toggle_task(idx)
-  M.state.tasks[idx].done = not M.state.tasks[idx].done
-  storage.save(M.config.storage_path, M.state.tasks)
-  window.render(M.state, M.config)
+  if M.state.tasks[idx] then
+    M.state.tasks[idx].done = not M.state.tasks[idx].done
+    storage.save(M.config.storage_path, M.state.tasks)
+    window.render(M.state, M.config)
+  end
 end
-
-local EMOJIS = { "📌", "📝", "💡", "🔧", "🚀", "⚡", "🎯", "📋", "✅", "🔍", "💻", "🛠", "📦", "🎨", "🔨" }
 
 function M.add_task(text, duration)
   local emoji = EMOJIS[math.random(#EMOJIS)]
@@ -102,18 +82,20 @@ function M.add_task(text, duration)
 end
 
 function M.delete_task(idx)
-  table.remove(M.state.tasks, idx)
-  if M.state.current_task_idx == idx then
-    M.state.current_task_idx = 0
-  elseif M.state.current_task_idx > idx then
-    M.state.current_task_idx = M.state.current_task_idx - 1
+  if M.state.tasks[idx] then
+    table.remove(M.state.tasks, idx)
+    if M.state.current_task_idx == idx then
+      M.state.current_task_idx = 0
+    elseif M.state.current_task_idx > idx then
+      M.state.current_task_idx = M.state.current_task_idx - 1
+    end
+    storage.save(M.config.storage_path, M.state.tasks)
+    window.render(M.state, M.config)
   end
-  storage.save(M.config.storage_path, M.state.tasks)
-  window.render(M.state, M.config)
 end
 
 function M.edit_task(idx, text, duration)
-  if idx > 0 and idx <= #M.state.tasks then
+  if M.state.tasks[idx] then
     M.state.tasks[idx].text = text
     if duration then
       M.state.tasks[idx].duration = duration
@@ -124,7 +106,7 @@ function M.edit_task(idx, text, duration)
 end
 
 function M.edit_duration(idx, duration)
-  if idx > 0 and idx <= #M.state.tasks then
+  if M.state.tasks[idx] then
     M.state.tasks[idx].duration = duration
     storage.save(M.config.storage_path, M.state.tasks)
     window.render(M.state, M.config)
@@ -132,20 +114,33 @@ function M.edit_duration(idx, duration)
 end
 
 function M.start_timer()
-  if M.state.current_task_idx == 0 or M.state.current_task_idx > #M.state.tasks then
+  if M.state.timer_running then
+    M.stop_timer()
+    return
+  end
+
+  if M.state.current_task_idx == 0 or not M.state.tasks[M.state.current_task_idx] then
     vim.notify("No task selected", vim.log.levels.WARN, { title = "SessionTodo" })
     return
   end
 
-  local task = M.state.tasks[M.state.current_task_idx]
   local task_idx = M.state.current_task_idx
-  M.state.timer_running = true
+  local task = M.state.tasks[task_idx]
+  local remaining = task.duration - task.elapsed
 
-  timer.start(task.duration, function()
+  if remaining <= 0 then
+    vim.notify("Task already finished", vim.log.levels.INFO, { title = "SessionTodo" })
+    return
+  end
+
+  M.state.timer_running = true
+  timer.start(remaining, function()
     M.on_timer_complete()
-  end, function(remaining)
-    M.state.tasks[task_idx].elapsed = M.state.tasks[task_idx].duration - remaining
-    window.render(M.state, M.config)
+  end, function(new_remaining)
+    if M.state.tasks[task_idx] then
+      M.state.tasks[task_idx].elapsed = M.state.tasks[task_idx].duration - new_remaining
+      window.render(M.state, M.config)
+    end
   end)
   window.render(M.state, M.config)
 end
@@ -158,8 +153,12 @@ function M.stop_timer()
 end
 
 function M.reset_timer()
-  if M.state.current_task_idx > 0 and M.state.current_task_idx <= #M.state.tasks then
-    M.state.tasks[M.state.current_task_idx].elapsed = 0
+  local idx = M.state.current_task_idx
+  if idx > 0 and M.state.tasks[idx] then
+    M.state.tasks[idx].elapsed = 0
+    if M.state.timer_running then
+      M.stop_timer()
+    end
     storage.save(M.config.storage_path, M.state.tasks)
     window.render(M.state, M.config)
   end
@@ -167,28 +166,23 @@ end
 
 function M.on_timer_complete()
   M.state.timer_running = false
-  local session = M.state.session_type
-  if session == "work" then
+  if M.state.session_type == "work" then
     M.state.session_type = "break"
-    vim.notify("Work session complete! Time for break.", vim.log.levels.INFO, { title = "SessionTodo" })
+    vim.notify("Session complete! Break time.", vim.log.levels.INFO, { title = "SessionTodo" })
   else
     M.state.session_type = "work"
-    vim.notify("Break over! Ready to work.", vim.log.levels.INFO, { title = "SessionTodo" })
+    vim.notify("Break over! Back to work.", vim.log.levels.INFO, { title = "SessionTodo" })
   end
   storage.save(M.config.storage_path, M.state.tasks)
   window.render(M.state, M.config)
 end
 
 function M.get_statusline()
-  if not M.state.timer_running then
-    return ""
-  end
+  if not M.state.timer_running then return "" end
   local task = M.state.tasks[M.state.current_task_idx]
   if not task then return "" end
-  local remaining = task.duration - task.elapsed
-  local mins = math.floor(remaining / 60)
-  local secs = remaining % 60
-  return string.format("⏱ %02d:%02d [%s]", mins, secs, task.text)
+  local rem = task.duration - task.elapsed
+  return string.format("⏱ %02d:%02d [%s]", math.floor(rem / 60), rem % 60, task.text)
 end
 
 return M
