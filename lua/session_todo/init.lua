@@ -1,0 +1,116 @@
+local M = {}
+local storage = require("session_todo.storage")
+local window = require("session_todo.window")
+local timer = require("session_todo.timer")
+
+M.state = {
+  tasks = {},
+  current_task_idx = 0,
+  timer_running = false,
+  session_type = "work",
+}
+
+M.config = {
+  work_duration = 25 * 60,
+  short_break = 5 * 60,
+  long_break = 15 * 60,
+  storage_path = vim.fn.stdpath("data") .. "/session_todos.json",
+}
+
+function M.setup(opts)
+  M.config = vim.tbl_deep_extend("force", M.config, opts or {})
+  M.state.tasks = storage.load(M.config.storage_path)
+  timer.set_notify_handler(function(msg, level)
+    vim.notify(msg, level, { title = "SessionTodo" })
+  end)
+end
+
+function M.toggle()
+  window.toggle(M.state, M.config, {
+    on_select = function(idx)
+      M.select_task(idx)
+    end,
+    on_toggle_task = function(idx)
+      M.toggle_task(idx)
+    end,
+    on_start_timer = function()
+      M.start_timer()
+    end,
+    on_stop_timer = function()
+      M.stop_timer()
+    end,
+  })
+end
+
+function M.select_task(idx)
+  M.state.current_task_idx = idx
+  window.render(M.state, M.config)
+end
+
+function M.toggle_task(idx)
+  M.state.tasks[idx].done = not M.state.tasks[idx].done
+  storage.save(M.config.storage_path, M.state.tasks)
+  window.render(M.state, M.config)
+end
+
+function M.add_task(text, duration)
+  table.insert(M.state.tasks, {
+    text = text,
+    duration = duration or M.config.work_duration,
+    done = false,
+    elapsed = 0,
+  })
+  storage.save(M.config.storage_path, M.state.tasks)
+  window.render(M.state, M.config)
+end
+
+function M.start_timer()
+  if M.state.current_task_idx == 0 or M.state.current_task_idx > #M.state.tasks then
+    vim.notify("No task selected", vim.log.levels.WARN, { title = "SessionTodo" })
+    return
+  end
+  local task = M.state.tasks[M.state.current_task_idx]
+  M.state.timer_running = true
+  timer.start(task.duration, function()
+    M.on_timer_complete()
+  end, function(remaining)
+    M.state.tasks[M.state.current_task_idx].elapsed = task.duration - remaining
+    window.render(M.state, M.config)
+  end)
+  window.render(M.state, M.config)
+end
+
+function M.stop_timer()
+  timer.stop()
+  M.state.timer_running = false
+  storage.save(M.config.storage_path, M.state.tasks)
+  window.render(M.state, M.config)
+end
+
+function M.on_timer_complete()
+  M.state.timer_running = false
+  local session = M.state.session_type
+  if session == "work" then
+    M.state.session_type = "break"
+    vim.notify("Work session complete! Time for break.", vim.log.levels.INFO, { title = "SessionTodo" })
+  else
+    M.state.session_type = "work"
+    vim.notify("Break over! Ready to work.", vim.log.levels.INFO, { title = "SessionTodo" })
+  end
+  storage.save(M.config.storage_path, M.state.tasks)
+  window.render(M.state, M.config)
+end
+
+function M.get_statusline()
+  if not M.state.timer_running then
+    return ""
+  end
+  local task = M.state.tasks[M.state.current_task_idx]
+  if not task then return "" end
+  local remaining = task.duration - task.elapsed
+  local mins = math.floor(remaining / 60)
+  local secs = remaining % 60
+  return string.format("⏱ %02d:%02d [%s]", mins, secs, task.text)
+end
+
+return M
