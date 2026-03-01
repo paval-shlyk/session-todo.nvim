@@ -53,6 +53,9 @@ function M.toggle()
     on_stop_timer = function()
       M.stop_timer()
     end,
+    on_reset_timer = function()
+      M.reset_timer()
+    end,
   })
 end
 
@@ -140,6 +143,14 @@ function M.stop_timer()
   M.state.timer_running = false
   storage.save(M.config.storage_path, M.state.tasks)
   window.render(M.state, M.config)
+end
+
+function M.reset_timer()
+  if M.state.current_task_idx > 0 and M.state.current_task_idx <= #M.state.tasks then
+    M.state.tasks[M.state.current_task_idx].elapsed = 0
+    storage.save(M.config.storage_path, M.state.tasks)
+    window.render(M.state, M.config)
+  end
 end
 
 function M.on_timer_complete()

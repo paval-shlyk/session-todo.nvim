@@ -209,6 +209,11 @@ function M.create_window(state, config)
       M.callbacks.on_start_timer()
     end
   end, { buffer = M.buf, noremap = true, silent = true })
+
+  vim.keymap.set("n", "<leader>r", function()
+    if M.show_help or M.search_mode then return end
+    M.callbacks.on_reset_timer()
+  end, { buffer = M.buf, noremap = true, silent = true })
 end
 
 function M.get_filtered_tasks(state)
@@ -340,6 +345,8 @@ function M.render_help()
     " d     delete task",
     " Space toggle done",
     " f     filter/search",
+    " <leader>r reset time",
+    " <leader>s start/stop",
     " g?    toggle help",
     " q     close",
   }
