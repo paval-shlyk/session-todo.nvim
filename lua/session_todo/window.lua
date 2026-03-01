@@ -75,19 +75,26 @@ function M.create_window(state, config)
   end)
 
   map("j", function()
-    if M.show_help then return end
-    local filtered = M.get_filtered_tasks(M.state)
     local cursor = vim.api.nvim_win_get_cursor(M.win)
-    local last_line = TASK_START_LINE + #filtered - 1
+    if M.show_help then
+      local count = vim.api.nvim_buf_line_count(M.buf)
+      if cursor[1] < count then
+        vim.api.nvim_win_set_cursor(M.win, { cursor[1] + 1, 0 })
+      end
+      return
+    end
+    local filtered = M.get_filtered_tasks(M.state)
+    local last_line = TASK_START_LINE + math.max(0, #filtered - 1)
     if cursor[1] < last_line then
       vim.api.nvim_win_set_cursor(M.win, { cursor[1] + 1, 0 })
+    elseif cursor[1] < TASK_START_LINE then
+      vim.api.nvim_win_set_cursor(M.win, { TASK_START_LINE, 0 })
     end
   end)
 
   map("k", function()
-    if M.show_help then return end
     local cursor = vim.api.nvim_win_get_cursor(M.win)
-    if cursor[1] > TASK_START_LINE then
+    if cursor[1] > (M.show_help and 1 or TASK_START_LINE) then
       vim.api.nvim_win_set_cursor(M.win, { cursor[1] - 1, 0 })
     end
   end)
@@ -138,7 +145,7 @@ function M.create_window(state, config)
     if not idx then return end
     local task = M.state.tasks[idx]
     vim.fn.inputsave()
-    local dur_str = vim.fn.input("Duration (min): ", tostring(task.duration / 60))
+    local dur_str = vim.fn.input("Duration (min): ", tostring(math.floor(task.duration / 60)))
     vim.fn.inputrestore()
     local dur = tonumber(dur_str)
     if dur and dur > 0 then
@@ -153,14 +160,12 @@ function M.create_window(state, config)
 
   map("<leader>s", function() M.callbacks.on_start_timer() end)
   map("<leader>r", function() M.callbacks.on_reset_timer() end)
-  
-  -- Initial cursor position
-  vim.api.nvim_win_set_cursor(M.win, { TASK_START_LINE, 0 })
 end
 
 function M.get_filtered_tasks(state)
   local result = {}
   local query = M.search_query:lower()
+  if not state or not state.tasks then return result end
   for i, task in ipairs(state.tasks) do
     if query == "" or task.text:lower():find(query, 1, true) then
       table.insert(result, { task = task, original_idx = i })
@@ -192,7 +197,7 @@ function M.render(state, config)
     local timer_str = "--:--"
     if state.timer_running and state.tasks[state.current_task_idx] then
       local t = state.tasks[state.current_task_idx]
-      local rem = t.duration - t.elapsed
+      local rem = math.max(0, t.duration - t.elapsed)
       timer_str = string.format("%02d:%02d", math.floor(rem / 60), rem % 60)
     end
     table.insert(lines, string.format(" %s | %s | %s", session, timer_str, M.search_query ~= "" and "/"..M.search_query or ""))
@@ -208,25 +213,41 @@ function M.render(state, config)
   end
 
   local cursor = vim.api.nvim_win_get_cursor(M.win)
+  
   vim.api.nvim_buf_set_option(M.buf, "modifiable", true)
   vim.api.nvim_buf_set_lines(M.buf, 0, -1, false, lines)
   vim.api.nvim_buf_set_option(M.buf, "modifiable", false)
   
-  -- Preserve/adjust cursor
+  -- Correct cursor placement
   local max_line = #lines
   local new_line = math.min(cursor[1], max_line)
+  if not M.show_help and new_line < TASK_START_LINE and max_line >= TASK_START_LINE then
+    new_line = TASK_START_LINE
+  end
   if new_line > 0 then
-    vim.api.nvim_win_set_cursor(M.win, { new_line, 0 })
+    pcall(vim.api.nvim_win_set_cursor, M.win, { new_line, 0 })
   end
 
   vim.api.nvim_buf_clear_namespace(M.buf, -1, 0, -1)
   vim.api.nvim_buf_add_highlight(M.buf, 0, "Title", 0, 0, -1)
+  
+  if not M.show_help then
+    local filtered = M.get_filtered_tasks(state)
+    for i, item in ipairs(filtered) do
+      local line_idx = TASK_START_LINE + i - 2
+      if item.original_idx == state.current_task_idx then
+        vim.api.nvim_buf_add_highlight(M.buf, 0, "Keyword", line_idx, 0, -1)
+      elseif item.task.done then
+        vim.api.nvim_buf_add_highlight(M.buf, 0, "Comment", line_idx, 0, -1)
+      end
+    end
+  end
 end
 
 function M.pick(state, config, callbacks)
   local items = {}
   for i, t in ipairs(state.tasks) do
-    table.insert(items, { idx = i, text = t.text, display = string.format("%s %s", t.done and "[x]" or "[ ]", t.text) })
+    table.insert(items, { idx = i, text = t.text, display = string.format("%s %s %s", t.emoji or "📌", t.done and "[x]" or "[ ]", t.text) })
   end
   vim.ui.select(items, { prompt = "Select task:", format_item = function(item) return item.display end }, function(choice)
     if choice then callbacks.on_select(choice.idx) end
